@@ -1,44 +1,48 @@
 #!/bin/bash
 
-# Autore: Enio Carboni
-# Controllo se la vm sta swappando in base a /proc/sys/vm/swappiness
-#  (vedere http://lwn.net/Articles/83588/ )
-# ed ai valori di /proc/meminfo
-# l'exit code e' valido per nrpe e quindi nagios
+# Author: Enio Carboni
+# Check (the kernel behavior ) if the vm is starting to swap or not based on /proc/sys/vm/swappiness
+#  see: http://lwn.net/Articles/83588/
+#  see: https://en.wikipedia.org/wiki/Swappiness
+#  see: http://askubuntu.com/questions/103915/how-do-i-configure-swappiness
+# exit code is valid for nrpe and than nagios
 
+DEBUG=0
 NRPE_STATE_OK=0
 NRPE_STATE_WARNING=1
 NRPE_STATE_CRITICAL=2
 NRPE_STATE_UNKNOWN=3
 NRPE_STATE_DEPENDENT=4
 
-# metto una soglia in percentuale per il warnings
-soglia=5
+# set a threshold (%) for a warnings message
+threshold=5
 
 swappiness=$(cat /proc/sys/vm/swappiness)
-swappiness_soglia_bassa=$(( $swappiness - $soglia ))
-swappiness_soglia_alta=$(( $swappiness + $soglia ))
+swappiness_threshold_low=$(( $swappiness - $threshold ))
+swappiness_threshold_high=$(( $swappiness + $threshold ))
 used_ram=$(awk '/MemTotal/ {mt=$2}; /MemFree/ {mf=$2}; /^Buffers:/ {b=$2}; /SReclaimable/ {sr=$2}; /^Cached:/ {c=$2}; /^Shmem:/ {sh=$2} END {print mt-mf-b-sr-c+sh}' /proc/meminfo)
 tot_ram=$(awk '/MemTotal/ {mt=$2}; /^Shmem:/ {sh=$2} END {print mt+sh}' /proc/meminfo)
 used_ram_perc=$(( $used_ram * 100 / $tot_ram ))
-# echo "swappiness=$swappiness"
-# echo "used_ram=$used_ram"
-# echo "tot_ram=$tot_ram"
-# echo "used_ram_perc=$used_ram_perc"
-if [ "$used_ram_perc" -gt "$swappiness_soglia_alta" ]; then
-	echo "Sto swappando"
+if [ "$DEBUG" = "1" ]; then
+	echo "swappiness=$swappiness"
+	echo "used_ram=$used_ram"
+	echo "tot_ram=$tot_ram"
+	echo "used_ram_perc=$used_ram_perc"
+fi
+if [ "$used_ram_perc" -gt "$((100 - $swappiness_threshold_high))" ]; then
+	echo "I'm swapping (swappiness=$swappiness, used_ram_perc=$used_ram_perc)"
 	exit $NRPE_STATE_CRITICAL
-elif  [ "$used_ram_perc" -gt "$swappiness_soglia_bassa" ]; then
-	echo "Sto iniando a swappare"
+elif  [ "$used_ram_perc" -gt "$((100 - $swappiness_threshold_low))" ]; then
+	echo "I'm starting to swap (swappiness=$swappiness, used_ram_perc=$used_ram_perc)"
 	exit $NRPE_STATE_WARNING
 else
-	echo "Ok non sto swappando"
+	echo "Ok I'm not swapping (swappiness=$swappiness, used_ram_perc=$used_ram_perc)"
 	exit $NRPE_STATE_OK
 fi
 
 # COPYRIGHT
 # linux_im_swapping is Copyright (c) 2014 Enio Carboni - Italy
-# netbkpstatus is free software: you can redistribute it and/or modify
+# linux_im_swapping is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
